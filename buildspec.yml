@@ -1,0 +1,35 @@
+version: 0.2
+env:
+  exported-variables:
+    - APP_NAME
+    - APP_VERSION
+    - APP_ENVIRONMENT
+phases:
+  install:
+    runtime-versions:
+      java: corretto11
+    commands:
+      - mvn package -DskipTests
+      - npm install -g jfrog-cli-go --unsafe-perm=true
+      - jfrog c add artifactory --user=$JFROG_TALENTPORT_DEPLOY_USER --password=$JFROG_TALENTPORT_DEPLOY_PASS --url=$JFROG_URL --interactive=false
+      - jfrog rt mvnc --server-id-resolve=artifactory --server-id-deploy=artifactory --repo-resolve-releases=$JFROG_TALENTPORT_RESOLVE_REPO_MAVEN --repo-resolve-snapshots=$JFROG_TALENTPORT_RESOLVE_REPO_MAVEN_SNAPSHOT --repo-deploy-releases=$JFROG_TALENTPORT_DEPLOY_REPO_MAVEN --repo-deploy-snapshots=$JFROG_TALENTPORT_DEPLOY_REPO_MAVEN_SNAPSHOT
+  pre_build:
+    commands:
+      - APP_NAME=$(mvn org.apache.maven.plugins:maven-help-plugin:3.1.0:evaluate -Dexpression=project.artifactId -q -DforceStdout)
+      - APP_VERSION=$(mvn org.apache.maven.plugins:maven-help-plugin:3.1.0:evaluate -Dexpression=project.version -q -DforceStdout)
+      - jfrog rt mvn clean install --build-name=$APP_NAME --build-number=$APP_VERSION
+      - jfrog rt bp $APP_NAME $APP_VERSION
+      - aws s3 cp ./dist/java/lib/$APP_NAME-$APP_VERSION.jar s3://$BUCKET_NAME/artifacts/$APP_NAME-$APP_VERSION.jar --sse aws:kms --sse-kms-key-id $KMS_KEY_ID --acl bucket-owner-full-control
+      - cd ./dist
+      - zip -r layer.zip ./java
+      - cd ..
+      - rm -fr ./dist/java
+  build:
+    commands:
+      - aws s3 cp s3://$BUCKET_NAME/config/template-layer.json ./template.json
+      - aws cloudformation package --template-file template.yml --s3-bucket $BUCKET_NAME --output-template-file outputtemplate.yml --kms-key-id $KMS_KEY_ID --s3-prefix $APP_NAME/Artifacts
+artifacts:
+  files:
+    - template.yml
+    - outputtemplate.yml
+    - template.json

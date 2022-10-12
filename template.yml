@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template For Infra Java Layer
+Parameters:
+  Name:
+    Type: String
+  Version:
+    Type: String
+Resources:
+  Layer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Ref Name
+      Description: !Ref Version
+      ContentUri: ./dist/layer.zip
+      CompatibleRuntimes:
+        - java8
+        - java11
+      RetentionPolicy: Retain
